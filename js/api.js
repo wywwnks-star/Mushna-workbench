@@ -255,34 +255,42 @@ ${text.slice(0, 3000)}`;
   /**
    * 获取热点数据
    * 使用多个公开热榜API + 内置备用数据
+   * 快速返回：先立即返回备用数据保证页面有内容，同时尝试API，超时就用备用
    */
   async function fetchHotTopics(platform) {
-    // 多个API源，按优先级尝试
-    const sources = [
-      // 第一个源：使用tenapi.cn（比较稳定）
-      () => fetchFromTenAPI(platform),
-      // 第二个源：使用vvhan API
-      () => fetchFromVvhan(platform),
-      // 第三个源：使用oioweb API
-      () => fetchFromOioweb(platform),
-    ];
+    // 立即返回备用数据，保证页面不空白
+    const fallback = FALLBACK_HOT_DATA[platform] || [];
+    
+    // 创建一个超时Promise，3秒没拿到API数据就直接返回备用
+    const timeoutPromise = new Promise(resolve => {
+      setTimeout(() => resolve(fallback), 3000);
+    });
 
-    for (const fn of sources) {
-      try {
-        const items = await fn();
-        if (items && items.length >= 5) {
-          console.log(`成功从API获取${platform}热点:`, items.length, '条');
-          return items;
+    // 尝试API的Promise
+    const apiPromise = (async () => {
+      const sources = [
+        () => fetchFromTenAPI(platform),
+        () => fetchFromVvhan(platform),
+        () => fetchFromOioweb(platform),
+      ];
+
+      for (const fn of sources) {
+        try {
+          const items = await fn();
+          if (items && items.length >= 5) {
+            console.log(`成功从API获取${platform}热点:`, items.length, '条');
+            return items;
+          }
+        } catch (e) {
+          console.warn(`获取${platform}热点失败:`, e.message);
+          continue;
         }
-      } catch (e) {
-        console.warn(`获取${platform}热点失败:`, e.message);
-        continue;
       }
-    }
+      return fallback;
+    })();
 
-    // 所有API都失败，返回内置示例数据
-    console.log(`使用${platform}内置示例数据`);
-    return FALLBACK_HOT_DATA[platform] || [];
+    // 谁先返回用谁
+    return Promise.race([apiPromise, timeoutPromise]);
   }
 
   // 从tenapi获取
