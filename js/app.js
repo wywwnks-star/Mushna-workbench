@@ -28,10 +28,32 @@
     // 导航到默认页
     navigate('dashboard');
 
-    // 注册Service Worker（适配子路径部署）
+    // 注册Service Worker（适配子路径部署，自动检测更新）
     if ('serviceWorker' in navigator) {
       const swUrl = (window.BASE_PATH || '/') + 'sw.js';
-      navigator.serviceWorker.register(swUrl, { scope: window.BASE_PATH || '/' }).catch(() => {});
+      navigator.serviceWorker.register(swUrl, { scope: window.BASE_PATH || '/' })
+        .then(reg => {
+          // 检测到新版本时立即激活并刷新
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // 有新版本，发送消息让SW跳过等待，然后刷新页面
+                newWorker.postMessage('skipWaiting');
+              }
+            });
+          });
+          
+          // 新SW激活后刷新页面
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+              refreshing = true;
+              window.location.reload();
+            }
+          });
+        })
+        .catch(() => {});
     }
 
     // PWA安装提示
