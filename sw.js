@@ -1,7 +1,7 @@
 /**
  * Service Worker - 离线缓存
  * 支持GitHub Pages子路径部署
- * v5 - 修复缓存问题，使用网络优先策略，确保更新及时
+ * v6 - 修复缓存问题，使用网络优先策略，确保更新及时
  */
 const CACHE_NAME = 'creator-workbench-v5';
 const ASSETS = [
