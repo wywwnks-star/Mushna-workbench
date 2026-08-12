@@ -3095,32 +3095,35 @@ const Pages = (() => {
     // 导航到默认页
     navigate('dashboard');
 
-    // 注册Service Worker（适配子路径部署，自动检测更新）
+    // 注册Service Worker（v10安全版：绝对不自动刷新）
     if ('serviceWorker' in navigator) {
-      const swUrl = (window.BASE_PATH || '/') + 'sw.js';
+      const swUrl = (window.BASE_PATH || '/') + 'sw.js?v=10';
+      
       navigator.serviceWorker.register(swUrl, { scope: window.BASE_PATH || '/' })
         .then(reg => {
-          // 检测到新版本时立即激活并刷新
+          console.log('SW注册成功，scope:', reg.scope);
+          
+          // 检测到新版本正在安装
           reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // 有新版本，发送消息让SW跳过等待，然后刷新页面
-                newWorker.postMessage('skipWaiting');
+              if (newWorker.state === 'installed') {
+                if (navigator.serviceWorker.controller) {
+                  // 有新版本等待激活 - 只提示，不自动刷新
+                  Utils.toast('✨ 发现新版本，关闭所有标签页后重新打开即可更新');
+                  console.log('SW新版本已安装，等待下次打开时激活');
+                } else {
+                  // 首次安装SW，离线缓存已就绪
+                  console.log('SW首次安装完成，支持离线使用');
+                }
               }
             });
           });
           
-          // 新SW激活后刷新页面
-          let refreshing = false;
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!refreshing) {
-              refreshing = true;
-              window.location.reload();
-            }
-          });
+          // 注意：移除了controllerchange自动刷新逻辑，彻底杜绝无限刷新
+          // 新版本不会自动激活（sw.js中没有skipWaiting），需要用户手动刷新后才会生效
         })
-        .catch(() => {});
+        .catch((e) => { console.warn('SW注册失败(不影响使用):', e); });
     }
 
     // PWA安装提示
