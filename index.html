@@ -11,13 +11,70 @@
   <meta name="description" content="自媒体创作者专属工作台 - 数据看板、热点追踪、灵感收集、日记记录">
   <title>创作工作台</title>
   <script>
-    var APP_VERSION = 'v8';
+    var APP_VERSION = 'v10';
+
+    // ========== 紧急修复：彻底清理无限刷新循环 ==========
+    (function() {
+      var CLEANUP_FLAG = 'sw_cleanup_v10_done';
+      
+      // 如果还没做过清理，先彻底注销所有Service Worker并清理缓存
+      if (sessionStorage.getItem(CLEANUP_FLAG) !== '1') {
+        sessionStorage.setItem(CLEANUP_FLAG, '1');
+        
+        var needsReload = false;
+        
+        try {
+          // 注销所有Service Worker
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              if (registrations && registrations.length > 0) {
+                needsReload = true;
+                return Promise.all(registrations.map(function(r) {
+                  console.log('注销旧SW:', r.scope);
+                  return r.unregister();
+                }));
+              }
+            }).then(function() {
+              // 清理所有缓存
+              if ('caches' in window) {
+                return caches.keys().then(function(keys) {
+                  if (keys && keys.length > 0) {
+                    needsReload = true;
+                    return Promise.all(keys.map(function(k) {
+                      console.log('删除缓存:', k);
+                      return caches.delete(k);
+                    }));
+                  }
+                });
+              }
+            }).then(function() {
+              // 只有在确实有东西需要清理时才刷新
+              if (needsReload) {
+                console.log('清理完成，刷新页面...');
+                // 添加时间戳确保获取最新内容，用replace避免历史记录问题
+                var sep = window.location.search ? '&' : '?';
+                window.location.replace(window.location.pathname + window.location.search + sep + '_swclean=' + Date.now());
+              }
+            }).catch(function(err) {
+              console.warn('SW清理过程出错，但已设置安全标志:', err);
+              // 即使清理出错，页面也会正常加载（新代码不会自动刷新）
+            });
+          }
+        } catch(e) {
+          console.warn('清理脚本异常，继续加载:', e);
+        }
+      }
+    })();
+
+    // 错误处理
     window.addEventListener('error', function(e) {
       document.body.innerHTML = '<div style="padding:40px 20px;text-align:center;font-family:system-ui,sans-serif;"><h2 style="color:#ef4444;">⚠️ 加载出错</h2><p style="color:#666;margin:16px 0;">' + (e.message || '未知错误') + '</p><p style="color:#999;font-size:14px;">请按 Ctrl+Shift+R (Windows) 或 Cmd+Shift+R (Mac) 强制刷新页面</p><button onclick="location.reload(true)" style="background:#10b981;color:white;border:none;padding:12px 32px;border-radius:8px;font-size:16px;margin-top:16px;cursor:pointer;">🔄 重新加载</button></div>';
     });
     window.addEventListener('unhandledrejection', function(e) {
       console.error('Promise错误:', e.reason);
     });
+
+    // 设置BASE_PATH
     (function() {
       var path = window.location.pathname;
       var basePath = '/';
@@ -33,26 +90,19 @@
       baseTag.href = basePath;
       document.head.appendChild(baseTag);
     })();
+
+    // 版本更新时清理旧缓存
     (function() {
       var lastVersion = localStorage.getItem('app_version');
       if (lastVersion !== APP_VERSION) {
-        if ('caches' in window) {
-          caches.keys().then(function(keys) {
-            keys.forEach(function(key) { caches.delete(key); });
-          });
-        }
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistrations().then(function(regs) {
-            regs.forEach(function(r) { r.unregister(); });
-          });
-        }
+        console.log('版本更新:', lastVersion, '->', APP_VERSION);
         localStorage.setItem('app_version', APP_VERSION);
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/style.css?v=8">
-  <link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=8">
-  <link rel="apple-touch-icon" href="icons/icon-192.png?v=8">
+  <link rel="stylesheet" href="css/style.css?v=10">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg?v=10">
+  <link rel="apple-touch-icon" href="icons/icon-192.png?v=10">
 </head>
 <body>
   <div class="toast" id="toast"></div>
@@ -61,34 +111,11 @@
   <script>
     var manifestLink = document.createElement('link');
     manifestLink.rel = 'manifest';
-    manifestLink.href = 'manifest.json?v=8';
+    manifestLink.href = 'manifest.json?v=10';
     document.head.appendChild(manifestLink);
   </script>
 
-  <!-- 所有JS合并为一个文件，减少更新出错概率 -->
-  <script src="js/app-combined.js?v=8"></script>
-
-  <script>
-    window.addEventListener('load', function() {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js?v=8', { scope: window.BASE_PATH || '/' })
-          .then(function(reg) {
-            reg.addEventListener('updatefound', function() {
-              var newWorker = reg.installing;
-              newWorker.addEventListener('statechange', function() {
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  newWorker.postMessage('skipWaiting');
-                }
-              });
-            });
-            var refreshing = false;
-            navigator.serviceWorker.addEventListener('controllerchange', function() {
-              if (!refreshing) { refreshing = true; window.location.reload(); }
-            });
-          })
-          .catch(function(){});
-      }
-    });
-  </script>
+  <!-- 所有JS合并为一个文件 -->
+  <script src="js/app-combined.js?v=10"></script>
 </body>
 </html>
